@@ -12,12 +12,25 @@
         label { display: block; margin-top: 10px; }
         input[type="number"] { width: 100px; }
         button { margin-top: 20px; padding: 10px; }
+
+        /* Styles for tabs */
+        .tabs { overflow: hidden; border: 1px solid #ccc; background-color: #f1f1f1; }
+        .tabs button { background-color: inherit; float: left; border: none; outline: none; cursor: pointer; padding: 14px 16px; transition: 0.3s; }
+        .tabs button:hover { background-color: #ddd; }
+        .tabs button.active { background-color: #ccc; }
+        .tabcontent { display: none; padding: 6px 12px; border: 1px solid #ccc; border-top: none; }
     </style>
 </head>
 <body>
     <h1>GARCH(1,1) Model Simulator</h1>
 
-    <div class="container">
+    <div class="tabs">
+        <button class="tab-button active" onclick="openTab(event, 'simulation')">Simulation</button>
+        <button class="tab-button" onclick="openTab(event, 'distribution')">Distribution</button>
+    </div>
+
+    <div id="simulation" class="tabcontent">
+        <div class="container">
         <div class="controls">
             <h2>Parameters</h2>
             <label for="initialPrice">Initial Price (P0):</label>
@@ -44,7 +57,7 @@
             <label for="drift">Drift per Step (μ0):</label>
             <input type="number" id="drift" value="0" step="0.00001">
 
-            <button onclick="runSimulation()">Run Simulation</button>
+            <button onclick="runSimulation(document.getElementById('distribution').style.display === 'block' ? 1000 : 1)">Run Simulation</button>
 
             <h2>Results</h2>
             <div id="stats">
@@ -63,10 +76,40 @@
             </div>
         </div>
     </div>
+</div>
 
-    <script>
-        let priceChartInstance;
-        let volatilityChartInstance;
+<div id="distribution" class="tabcontent" style="display:none;">
+    <div class="chart-container">
+        <h2>Final Price Distribution</h2>
+        <canvas id="distributionChart"></canvas>
+    </div>
+</div>
+
+<script>
+    let priceChartInstance;
+    let volatilityChartInstance;
+    let distributionChartInstance; // Add instance for distribution chart
+
+    // Function to open specific tab
+    function openTab(evt, tabName) {
+        var i, tabcontent, tablinks;
+        tabcontent = document.getElementsByClassName("tabcontent");
+        for (i = 0; i < tabcontent.length; i++) {
+            tabcontent[i].style.display = "none";
+        }
+        tablinks = document.getElementsByClassName("tab-button");
+        for (i = 0; i < tablinks.length; i++) {
+            tablinks[i].className = tablinks[i].className.replace(" active", "");
+        }
+        document.getElementById(tabName).style.display = "block";
+        evt.currentTarget.className += " active";
+    }
+
+    // Get the element with id="defaultOpen" and click on it
+    document.addEventListener("DOMContentLoaded", function() {
+        document.getElementsByClassName("tab-button")[0].click();
+    });
+
 
         function generateUniform(min, max) {
             return Math.random() * (max - min) + min;
@@ -122,7 +165,7 @@
             };
         }
 
-        function runSimulation() {
+        function runSimulation(numberOfSimulations = 1) { // Add numberOfSimulations parameter
             const initialPrice = parseFloat(document.getElementById('initialPrice').value);
             const a0 = parseFloat(document.getElementById('a0').value);
             const a1 = parseFloat(document.getElementById('a1').value);
@@ -136,72 +179,134 @@
             if (isNaN(initialShock)) initialShock = 0;
             if (isNaN(drift)) drift = 0; // ドリフトがNaNなら0に
 
+            let finalPrices = [];
 
-            let prices = [initialPrice];
-            let volatilities = [initialStd]; // 最初のボラティリティ
-            let timeLabels = [0];
+            for (let sim = 0; sim < numberOfSimulations; sim++) {
+                let prices = [initialPrice];
+                let volatilities = [initialStd]; // 最初のボラティリティ
+                let timeLabels = [0];
 
-            let currentPrice = initialPrice;
-            let currentStd = initialStd;
-            let currentShock = initialShock;
+                let currentPrice = initialPrice;
+                let currentStd = initialStd;
+                let currentShock = initialShock;
 
-            for (let i = 1; i <= numSteps; i++) {
-                timeLabels.push(i);
-                // simulateGARCHStep に drift を渡す
-                let result = simulateGARCHStep(currentPrice, currentStd, currentShock, a0, a1, a2, drift);
-                currentPrice = result.newPrice;
-                currentStd = result.newStd;
-                currentShock = result.newShock;
+                for (let i = 1; i <= numSteps; i++) {
+                    timeLabels.push(i);
+                    // simulateGARCHStep に drift を渡す
+                    let result = simulateGARCHStep(currentPrice, currentStd, currentShock, a0, a1, a2, drift);
+                    currentPrice = result.newPrice;
+                    currentStd = result.newStd;
+                    currentShock = result.newShock;
 
-                prices.push(currentPrice);
-                volatilities.push(currentStd);
+                    prices.push(currentPrice);
+                    volatilities.push(currentStd);
+                }
+                finalPrices.push(currentPrice); // Store final price
             }
 
-            // Chart.jsでグラフ描画
-            if (priceChartInstance) {
-                priceChartInstance.destroy();
-            }
-            const priceCtx = document.getElementById('priceChart').getContext('2d');
-            priceChartInstance = new Chart(priceCtx, {
-                type: 'line',
-                data: {
-                    labels: timeLabels,
-                    datasets: [{
-                        label: 'Stock Price',
-                        data: prices,
-                        borderColor: 'rgb(75, 192, 192)',
-                        tension: 0.1,
-                        pointRadius: 0 // 点を非表示に
-                    }]
-                },
-                options: { animation: false }
-            });
 
-            if (volatilityChartInstance) {
-                volatilityChartInstance.destroy();
-            }
-            const volCtx = document.getElementById('volatilityChart').getContext('2d');
-            volatilityChartInstance = new Chart(volCtx, {
-                type: 'line',
-                data: {
-                    labels: timeLabels,
-                    datasets: [{
-                        label: 'Volatility (Std Dev)',
-                        data: volatilities,
-                        borderColor: 'rgb(255, 99, 132)',
-                        tension: 0.1,
-                        pointRadius: 0
-                    }]
-                },
-                options: { animation: false }
-            });
+            if (numberOfSimulations === 1) {
+                // Chart.jsでグラフ描画 (only for single simulation)
+                if (priceChartInstance) {
+                    priceChartInstance.destroy();
+                }
+                const priceCtx = document.getElementById('priceChart').getContext('2d');
+                priceChartInstance = new Chart(priceCtx, {
+                    type: 'line',
+                    data: {
+                        labels: timeLabels,
+                        datasets: [{
+                            label: 'Stock Price',
+                            data: prices,
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1,
+                            pointRadius: 0 // 点を非表示に
+                        }]
+                    },
+                    options: { animation: false }
+                });
 
-            // 統計情報
-            document.getElementById('finalPrice').textContent = prices[prices.length - 1].toFixed(4);
-            document.getElementById('maxPrice').textContent = Math.max(...prices).toFixed(4);
-            document.getElementById('minPrice').textContent = Math.min(...prices).toFixed(4);
+                if (volatilityChartInstance) {
+                    volatilityChartInstance.destroy();
+                }
+                const volCtx = document.getElementById('volatilityChart').getContext('2d');
+                volatilityChartInstance = new Chart(volCtx, {
+                    type: 'line',
+                    data: {
+                        labels: timeLabels,
+                        datasets: [{
+                            label: 'Volatility (Std Dev)',
+                            data: volatilities,
+                            borderColor: 'rgb(255, 99, 132)',
+                            tension: 0.1,
+                            pointRadius: 0
+                        }]
+                    },
+                    options: { animation: false }
+                });
+
+                // 統計情報 (only for single simulation)
+                document.getElementById('finalPrice').textContent = prices[prices.length - 1].toFixed(4);
+                document.getElementById('maxPrice').textContent = Math.max(...prices).toFixed(4);
+                document.getElementById('minPrice').textContent = Math.min(...prices).toFixed(4);
+            }
+
+            // Display distribution if multiple simulations were run
+            if (numberOfSimulations > 1) {
+                displayDistribution(finalPrices);
+            }
         }
-        // 初期表示
+
+        // Function to display the distribution
+        function displayDistribution(data) {
+            // Calculate histogram data
+            const numBins = 50; // Number of bins for the histogram
+            const min = Math.min(...data);
+            const max = Math.max(...data);
+            const binWidth = (max - min) / numBins;
+            const bins = Array(numBins).fill(0);
+            const labels = [];
+
+            for (let i = 0; i < numBins; i++) {
+                labels.push((min + i * binWidth).toFixed(2) + ' - ' + (min + (i + 1) * binWidth).toFixed(2));
+            }
+
+            data.forEach(value => {
+                let binIndex = Math.floor((value - min) / binWidth);
+                if (binIndex === numBins) binIndex--; // Handle max value
+                if (binIndex >= 0 && binIndex < numBins) {
+                    bins[binIndex]++;
+                }
+            });
+
+            if (distributionChartInstance) {
+                distributionChartInstance.destroy();
+            }
+            const distCtx = document.getElementById('distributionChart').getContext('2d');
+            distributionChartInstance = new Chart(distCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Frequency',
+                        data: bins,
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: { title: { display: true, text: 'Final Price' } },
+                        y: { title: { display: true, text: 'Frequency' }, beginAtZero: true }
+                    },
+                    plugins: { legend: { display: false } },
+                    animation: false
+                }
+            });
+        }
+
+        // Initial display (run a single simulation)
         runSimulation();
     </script>
 </body>
