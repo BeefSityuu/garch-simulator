@@ -1,0 +1,2 @@
+# garch-simulator
+GARCHモデルのシミュレーション
