@@ -29,6 +29,8 @@
         <button class="tab-button" onclick="openTab(event, 'distribution')">Distribution</button>
     </div>
 
+    <button onclick="runSimulation(document.getElementById('distribution').style.display === 'block' ? 1000 : 1)">Run Simulation</button>
+
     <div id="simulation" class="tabcontent">
         <div class="container">
         <div class="controls">
@@ -37,7 +39,7 @@
             <input type="number" id="initialPrice" value="100">
 
             <label for="a0">Alpha0 (_a0):</label>
-            <input type="number" id="a0" value="0.00001" step="0.000001">
+            <input type="number" id="a0" value="0.001" step="0.0001">
 
             <label for="a1">Alpha1 (_a1):</label>
             <input type="number" id="a1" value="0.1" step="0.01">
@@ -55,7 +57,28 @@
             <input type="number" id="initialShock" value="0" step="0.001">
 
             <label for="drift">Drift per Step (μ0):</label>
-            <input type="number" id="drift" value="0" step="0.00001">
+            <input type="number" id="drift" value="0" step="0.0001">
+
+            <label for="priceMin">Price Min:</label>
+            <input type="number" id="priceMin" value="80" step="0.01">
+            <label for="priceMax">Price Max:</label>
+            <input type="number" id="priceMax" value="130" step="0.01">
+            <label for="priceStepSize">Price Step Size:</label>
+            <input type="number" id="priceStepSize" value="5" step="5">
+
+            <label for="volatilityMin">Volatility Min:</label>
+            <input type="number" id="volatilityMin" value="0" step="1">
+            <label for="volatilityMax">Volatility Max:</label>
+            <input type="number" id="volatilityMax" value="2" step="1">
+            <label for="volatilityStepSize">Volatility Step Size:</label>
+            <input type="number" id="volatilityStepSize" value="0.5" step="0.1">
+
+            <label for="distributionMin">Distribution Min:</label>
+            <input type="number" id="distributionMin" value="0" step="1">
+            <label for="distributionMax">Distribution Max:</label>
+            <input type="number" id="distributionMax" value="250" step="1">
+            <label for="distributionStepSize">Distribution Step Size:</label>
+            <input type="number" id="distributionStepSize" value="1" step="1">
 
             <button onclick="runSimulation(document.getElementById('distribution').style.display === 'block' ? 1000 : 1)">Run Simulation</button>
 
@@ -166,6 +189,7 @@
         }
 
         function runSimulation(numberOfSimulations = 1) { // Add numberOfSimulations parameter
+            console.log('runSimulation called with numberOfSimulations:', numberOfSimulations); // Added log
             const initialPrice = parseFloat(document.getElementById('initialPrice').value);
             const a0 = parseFloat(document.getElementById('a0').value);
             const a1 = parseFloat(document.getElementById('a1').value);
@@ -175,37 +199,64 @@
             let initialShock = parseFloat(document.getElementById('initialShock').value);
             const drift = parseFloat(document.getElementById('drift').value); // ドリフトの値を取得
 
+            const priceMin = parseFloat(document.getElementById('priceMin').value);
+            const priceMax = parseFloat(document.getElementById('priceMax').value);
+            const priceStepSize = parseFloat(document.getElementById('priceStepSize').value);
+
+            const volatilityMin = parseFloat(document.getElementById('volatilityMin').value);
+            const volatilityMax = parseFloat(document.getElementById('volatilityMax').value);
+            const volatilityStepSize = parseFloat(document.getElementById('volatilityStepSize').value);
+
+            const distributionMin = parseFloat(document.getElementById('distributionMin').value);
+            const distributionMax = parseFloat(document.getElementById('distributionMax').value);
+            const distributionStepSize = parseFloat(document.getElementById('distributionStepSize').value);
+
             if (isNaN(initialStd)) initialStd = Math.sqrt(a0 / (1 - a1 - a2)) || 0.01;
             if (isNaN(initialShock)) initialShock = 0;
             if (isNaN(drift)) drift = 0; // ドリフトがNaNなら0に
 
             let finalPrices = [];
 
-            for (let sim = 0; sim < numberOfSimulations; sim++) {
-                let prices = [initialPrice];
-                let volatilities = [initialStd]; // 最初のボラティリティ
-                let timeLabels = [0];
+            let prices = [initialPrice]; // Declared outside the loop
+            let volatilities = [initialStd]; // 最初のボラティリティ // Declared outside the loop
+            let timeLabels = [0]; // Declared outside the loop
 
+
+            for (let sim = 0; sim < numberOfSimulations; sim++) {
                 let currentPrice = initialPrice;
                 let currentStd = initialStd;
                 let currentShock = initialShock;
 
+                // Reset prices, volatilities, and timeLabels for each simulation if needed for charting
+                if (numberOfSimulations === 1) {
+                     prices = [initialPrice];
+                     volatilities = [initialStd];
+                     timeLabels = [0];
+                 }
+
+
                 for (let i = 1; i <= numSteps; i++) {
-                    timeLabels.push(i);
+                    if (numberOfSimulations === 1) { // Only populate for single simulation
+                        timeLabels.push(i);
+                    }
                     // simulateGARCHStep に drift を渡す
                     let result = simulateGARCHStep(currentPrice, currentStd, currentShock, a0, a1, a2, drift);
                     currentPrice = result.newPrice;
                     currentStd = result.newStd;
                     currentShock = result.newShock;
 
-                    prices.push(currentPrice);
-                    volatilities.push(currentStd);
+                    if (numberOfSimulations === 1) { // Only populate for single simulation
+                        prices.push(currentPrice);
+                        volatilities.push(currentStd);
+                    }
                 }
                 finalPrices.push(currentPrice); // Store final price
-            }
+            } // Closing brace for the outer simulation loop
 
 
             if (numberOfSimulations === 1) {
+                console.log('Drawing simulation charts and updating stats.'); // Added log
+                console.log('Before charting - numberOfSimulations:', numberOfSimulations, 'timeLabels:', typeof timeLabels, timeLabels);
                 // Chart.jsでグラフ描画 (only for single simulation)
                 if (priceChartInstance) {
                     priceChartInstance.destroy();
@@ -223,7 +274,24 @@
                             pointRadius: 0 // 点を非表示に
                         }]
                     },
-                    options: { animation: false }
+                    options: {
+                        animation: false,
+                        scales: {
+                            y: { // Y-axis (Stock Price)
+                                min: !isNaN(priceMin) ? priceMin : undefined,
+                                max: !isNaN(priceMax) ? priceMax : undefined,
+                                ticks: {
+                                    stepSize: !isNaN(priceStepSize) && priceStepSize > 0 ? priceStepSize : undefined,
+                                },
+                            },
+                        },
+                        plugins: { // Optional: Add title
+                           title: {
+                             display: true,
+                             text: 'Stock Price Simulation'
+                           }
+                        }
+                    }
                 });
 
                 if (volatilityChartInstance) {
@@ -242,7 +310,18 @@
                             pointRadius: 0
                         }]
                     },
-                    options: { animation: false }
+                    options: { 
+                        animation: false,
+                        scales: {
+                            y: { // Y-axis (Volatility)
+                                min: !isNaN(volatilityMin) ? volatilityMin : undefined,
+                                max: !isNaN(volatilityMax) ? volatilityMax : undefined,
+                                ticks: {
+                                    stepSize: !isNaN(volatilityStepSize) && volatilityStepSize > 0 ? volatilityStepSize : undefined,
+                                },
+                            },
+                        },
+                    }
                 });
 
                 // 統計情報 (only for single simulation)
@@ -259,6 +338,8 @@
 
         // Function to display the distribution
         function displayDistribution(data) {
+            console.log('displayDistribution called with data:', data); // Added log
+            console.log('Inside displayDistribution - Distribution Min:', parseFloat(document.getElementById('distributionMin').value), 'Distribution Max:', parseFloat(document.getElementById('distributionMax').value)); // Added log to check values again
             // Calculate histogram data
             const numBins = 50; // Number of bins for the histogram
             const min = Math.min(...data);
@@ -297,7 +378,13 @@
                 },
                 options: {
                     scales: {
-                        x: { title: { display: true, text: 'Final Price' } },
+                        x: {
+                            ticks: {
+                                stepSize: !isNaN(distributionStepSize) && distributionStepSize > 0 ? distributionStepSize : undefined
+                            },
+                            min: !isNaN(distributionMin) ? distributionMin : undefined,
+                            max: !isNaN(distributionMax) ? distributionMax : undefined,
+                        },
                         y: { title: { display: true, text: 'Frequency' }, beginAtZero: true }
                     },
                     plugins: { legend: { display: false } },
